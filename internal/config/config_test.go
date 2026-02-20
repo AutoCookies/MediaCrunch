@@ -29,3 +29,10 @@ func TestValidateRejectsUnsupportedExtension(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestDaemonValidateRejectsInvalidWorkers(t *testing.T) {
+	cfg := DaemonConfig{InputDir: t.TempDir(), OutputDir: t.TempDir(), DBPath: t.TempDir() + "/x.db", Workers: 0, QueueSize: 1, Quality: 80, WriteMode: "atomic", OnSuccess: "keep"}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error")
+	}
+}
