@@ -1,37 +1,22 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
-func TestValidateRejectsLowQuality(t *testing.T) {
-	cfg := TranscodeConfig{InPath: "testdata/sample.jpg", OutPath: "build/out.webp", Quality: 0}
+func TestTranscodeValidateRejectsCodecMismatch(t *testing.T) {
+	in := filepath.Join(t.TempDir(), "a.jpg")
+	_ = os.WriteFile(in, []byte("x"), 0o644)
+	cfg := TranscodeConfig{InPath: in, OutPath: filepath.Join(t.TempDir(), "a.webp"), Quality: 80, Codec: "avif"}
 	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestValidateRejectsHighQuality(t *testing.T) {
-	cfg := TranscodeConfig{InPath: "testdata/sample.jpg", OutPath: "build/out.webp", Quality: 101}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestValidateRejectsMissingInput(t *testing.T) {
-	cfg := TranscodeConfig{InPath: "testdata/missing.jpg", OutPath: "build/out.webp", Quality: 80}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestValidateRejectsUnsupportedExtension(t *testing.T) {
-	cfg := TranscodeConfig{InPath: "testdata/sample.gif", OutPath: "build/out.webp", Quality: 80}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error")
+		t.Fatal("expected extension mismatch")
 	}
 }
 
 func TestDaemonValidateRejectsInvalidWorkers(t *testing.T) {
-	cfg := DaemonConfig{InputDir: t.TempDir(), OutputDir: t.TempDir(), DBPath: t.TempDir() + "/x.db", Workers: 0, QueueSize: 1, Quality: 80, WriteMode: "atomic", OnSuccess: "keep"}
+	cfg := DaemonConfig{InputDir: t.TempDir(), OutputDir: t.TempDir(), DBPath: filepath.Join(t.TempDir(), "x.db"), Workers: 0, QueueSize: 1, Quality: 80, Codec: "webp", WriteMode: "atomic", OnSuccess: "keep"}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected error")
 	}

@@ -1,84 +1,36 @@
-# MediaCrunch
+# MediaCrunch v1.0.0
 
-MediaCrunch is a CPU-only image transcoding daemon. It converts JPEG/PNG inputs into WebP using a Go orchestrator and a native C++ codec worker via cgo.
+MediaCrunch is a local CPU-only image transcoding daemon with WebP + AVIF support, durable SQLite history, smart skip policy, hash dedupe, metrics, benchmarks, and optional pprof.
 
-## Architecture
-
-```text
-+--------------------------+       +--------------------------+
-| cmd/mediacrunchd (Go)    | ----> | internal/app             |
-+--------------------------+       +-----------+--------------+
-                                                |
-                        +-----------------------+-----------------------+
-                        |                                               |
-                        v                                               v
-              +-------------------+                         +-------------------+
-              | daemon + watcher  | ---- paths -----------> | orchestrator      |
-              | fsnotify          |                         | worker pool       |
-              +-------------------+                         | bounded queue     |
-                                                            | skip policy       |
-                                                            +---------+---------+
-                                                                      |
-                                                         +------------+-------------+
-                                                         |                          |
-                                                         v                          v
-                                              +-------------------+      +-------------------+
-                                              | sqlite job store  |      | output atomic     |
-                                              | history + stats   |      | temp + fsync + mv |
-                                              +-------------------+      +-------------------+
-                                                                      |
-                                                                      v
-                                                           +-------------------+
-                                                           | native imgcodec   |
-                                                           | jpeg/png -> webp  |
-                                                           +-------------------+
-```
+## Codecs
+- **webp**: faster, good default.
+- **avif**: smaller output, slower encode.
 
 ## Dependencies (Ubuntu 22.04+)
-
 ```bash
-sudo apt install build-essential pkg-config libwebp-dev libjpeg-dev libpng-dev
+sudo apt install build-essential pkg-config sqlite3 libwebp-dev libjpeg-dev libpng-dev libheif-dev
 ```
 
-## Build
-
+## Build / Test / CI
 ```bash
 make build
-```
-
-Binary:
-
-```bash
-./bin/mediacrunchd
-```
-
-## Test
-
-```bash
 make test
-```
-
-## CI-equivalent local run
-
-```bash
 make ci
 ```
 
-## CLI Usage
-
-### One-shot transcode
-
+## Transcode CLI
 ```bash
-./bin/mediacrunchd transcode --in ./testdata/sample.jpg --out ./build/out.webp --q 82
+./bin/mediacrunchd transcode --in ./testdata/sample.jpg --out ./build/out.webp --codec webp --q 82
+./bin/mediacrunchd transcode --in ./testdata/sample.jpg --out ./build/out.avif --codec avif --q 60
 ```
 
-### Daemon mode
-
+## Daemon CLI
 ```bash
 ./bin/mediacrunchd daemon \
   --input ./testdata/in \
   --output ./build/out \
   --db ./build/mediacrunch.db \
+  --codec webp \
   --workers 4 \
   --quality 82 \
   --write-mode atomic \
@@ -86,28 +38,20 @@ make ci
   --metrics-addr 127.0.0.1:9090
 ```
 
-## Daemon Flags
+## Bench Harness
+```bash
+./bin/mediacrunchd bench --input ./testdata/bench --out ./build/bench --codec webp --q 82 --runs 3
+```
+Writes JSON summary to `./build/bench/report.json` with throughput, bytes, ratio, and duration.
 
-- `--input`: watched input directory (non-recursive in Phase 2).
-- `--output`: destination directory for generated `.webp` files.
-- `--db`: SQLite database path.
-- `--workers`: worker count.
-- `--queue-size`: bounded queue size (default `256`).
-- `--quality`: webp quality `[1..100]`.
-- `--write-mode`: must be `atomic`.
-- `--on-success`: must be `keep`.
-- `--metrics-addr`: HTTP bind address for `/metrics`.
+## Smart Skip + Dedupe
+A job is skipped when any condition is true:
+1. Output exists, is valid for codec, and is fresh vs input (`output_fresh`).
+2. Store has matching prior success (same path/codec/quality) and output remains valid (`store_success`).
+3. SHA-256 hash dedupe finds an existing valid output (`deduped_hash`).
 
 ## Metrics
-
-Endpoint:
-
-```text
-GET /metrics
-```
-
-Exposed counters:
-
+`GET /metrics` exposes:
 - `mediacrunch_jobs_enqueued_total`
 - `mediacrunch_jobs_rejected_total`
 - `mediacrunch_jobs_processed_total`
@@ -116,30 +60,14 @@ Exposed counters:
 - `mediacrunch_bytes_in_total`
 - `mediacrunch_bytes_out_total`
 
-## Local end-to-end run
-
+## CPU Profiling (optional)
+Profiling is off by default. Enable with `--pprof-addr` on daemon or bench.
 ```bash
-mkdir -p ./testdata/in ./build/out ./build
-./testdata/generate_sample.sh
-cp ./testdata/sample.jpg ./testdata/in/input.jpg
-./bin/mediacrunchd daemon --input ./testdata/in --output ./build/out --db ./build/mediacrunch.db --workers 4 --quality 82 --write-mode atomic --on-success keep --metrics-addr 127.0.0.1:9090
-```
-
-In another shell:
-
-```bash
-curl -s http://127.0.0.1:9090/metrics
-```
-
-Verify output exists:
-
-```bash
-ls ./build/out/*.webp
+./bin/mediacrunchd daemon ... --pprof-addr 127.0.0.1:6060
+go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=15
 ```
 
 ## Troubleshooting
-
-- **No files processed**: watcher is non-recursive; place files directly under `--input`.
-- **Permission errors**: ensure daemon user can read input, write output, and write DB directory.
-- **`database is locked`**: avoid multiple daemon instances sharing one DB path.
-- **Missing native libs**: install `libwebp-dev`, `libjpeg-dev`, `libpng-dev`.
+- Watcher is non-recursive: put inputs directly in `--input`.
+- If `database is locked`, ensure only one daemon uses the DB.
+- If AVIF build fails, verify `libheif-dev` is installed and visible to `pkg-config`.

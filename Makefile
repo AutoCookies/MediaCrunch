@@ -1,6 +1,6 @@
 BINARY := ./bin/mediacrunchd
 
-.PHONY: prepare-testdata fmt fmt-check lint build test ci clean
+.PHONY: prepare-testdata fmt fmt-check lint build test bench-smoke ci clean
 
 prepare-testdata:
 	./testdata/generate_sample.sh
@@ -21,7 +21,10 @@ build: prepare-testdata
 test: prepare-testdata
 	go test ./...
 
-ci: fmt-check lint test build
+bench-smoke: prepare-testdata
+	go test ./... -run TestNonExistent -bench BenchmarkHashSmall -benchtime=50ms
+
+ci: fmt-check lint test build bench-smoke
 
 clean:
-	rm -rf ./bin ./build/*.webp ./build/test-*.webp ./build/out.webp ./testdata/sample.jpg
+	rm -rf ./bin ./build/* ./testdata/sample.jpg

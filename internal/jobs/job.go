@@ -7,22 +7,29 @@ import (
 
 type JobState string
 
+type ImageCodec string
+
 const (
 	StateQueued  JobState = "queued"
 	StateRunning JobState = "running"
 	StateSuccess JobState = "success"
 	StateFailed  JobState = "failed"
 	StateSkipped JobState = "skipped"
+
+	CodecWebP ImageCodec = "webp"
+	CodecAVIF ImageCodec = "avif"
 )
 
 type Job struct {
 	ID           string
 	InputPath    string
 	OutputPath   string
+	Codec        ImageCodec
 	Quality      int
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	State        JobState
+	SkipReason   string
 	ErrorMessage *string
 	BytesIn      int64
 	BytesOut     int64
@@ -39,9 +46,7 @@ type Stats struct {
 }
 
 var validTransitions = map[JobState]map[JobState]bool{
-	StateQueued: {
-		StateRunning: true,
-	},
+	StateQueued: {StateRunning: true},
 	StateRunning: {
 		StateSuccess: true,
 		StateFailed:  true,

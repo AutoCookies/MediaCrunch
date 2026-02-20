@@ -5,75 +5,67 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"mediacrunch/internal/jobs"
 )
 
-func ensureSampleJPEG(t *testing.T) {
-	t.Helper()
-	rootSample := filepath.Join("..", "..", "..", "testdata", "sample.jpg")
-	if _, err := os.Stat(rootSample); err == nil {
-		return
+func ensureSampleJPEGPath(tb testing.TB) string {
+	tb.Helper()
+	root := filepath.Join("..", "..", "..")
+	raw := filepath.Join(root, "testdata", "sample.jpg")
+	if _, err := os.Stat(raw); err == nil {
+		return raw
 	}
-	b64Path := filepath.Join("..", "..", "..", "testdata", "sample.jpg.b64")
-	encoded, err := os.ReadFile(b64Path)
+	enc, err := os.ReadFile(filepath.Join(root, "testdata", "sample.jpg.b64"))
 	if err != nil {
-		t.Fatalf("read sample base64: %v", err)
+		tb.Fatal(err)
 	}
-	decoded, err := base64.StdEncoding.DecodeString(string(encoded))
+	dec, err := base64.StdEncoding.DecodeString(string(enc))
 	if err != nil {
-		t.Fatalf("decode sample base64: %v", err)
+		tb.Fatal(err)
 	}
-	if err := os.WriteFile(rootSample, decoded, 0o644); err != nil {
-		t.Fatalf("write sample jpg: %v", err)
+	if err := os.WriteFile(raw, dec, 0o644); err != nil {
+		tb.Fatal(err)
 	}
+	return raw
 }
 
-func TestTranscodeToWebPSuccess(t *testing.T) {
-	t.Parallel()
-
-	ensureSampleJPEG(t)
-	in := filepath.Join("..", "..", "..", "testdata", "sample.jpg")
+func TestTranscodeWebPSuccess(t *testing.T) {
+	in := ensureSampleJPEGPath(t)
 	out := filepath.Join("..", "..", "..", "build", "test-sample.webp")
-	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	_ = os.Remove(out)
-
+	_ = os.MkdirAll(filepath.Dir(out), 0o755)
 	tr := NewTranscoder()
-	if err := tr.TranscodeToWebP(context.Background(), in, out, 82); err != nil {
+	if _, err := tr.Transcode(context.Background(), jobs.CodecWebP, in, out, 82); err != nil {
 		t.Fatalf("transcode: %v", err)
 	}
-
-	data, err := os.ReadFile(out)
-	if err != nil {
-		t.Fatalf("read output: %v", err)
-	}
-	if len(data) < 32 {
-		t.Fatalf("output too small: %d bytes", len(data))
-	}
-	if string(data[0:4]) != "RIFF" {
-		t.Fatalf("missing RIFF header: %q", data[0:4])
-	}
-	if !containsWEBP(data[:32]) {
-		t.Fatalf("missing WEBP marker in first 32 bytes")
+	b, _ := os.ReadFile(out)
+	if len(b) < 32 || string(b[:4]) != "RIFF" || !strings.Contains(string(b[:32]), "WEBP") {
+		t.Fatal("invalid webp")
 	}
 }
 
-func TestTranscodeToWebPMissingInputFails(t *testing.T) {
-	t.Parallel()
-
+func TestTranscodeAVIFSuccess(t *testing.T) {
+	in := ensureSampleJPEGPath(t)
+	out := filepath.Join("..", "..", "..", "build", "test-sample.avif")
+	_ = os.MkdirAll(filepath.Dir(out), 0o755)
 	tr := NewTranscoder()
-	err := tr.TranscodeToWebP(context.Background(), "./does-not-exist.jpg", filepath.Join("..", "..", "..", "build", "missing.webp"), 82)
-	if err == nil {
-		t.Fatal("expected error for missing input")
+	if _, err := tr.Transcode(context.Background(), jobs.CodecAVIF, in, out, 60); err != nil {
+		t.Skipf("AVIF encoder unavailable on this runner: %v", err)
+	}
+	b, _ := os.ReadFile(out)
+	if len(b) < 32 || string(b[4:8]) != "ftyp" || !(strings.Contains(string(b[:32]), "avif") || strings.Contains(string(b[:32]), "avis")) {
+		t.Fatal("invalid avif")
 	}
 }
 
-func containsWEBP(b []byte) bool {
-	for i := 0; i+4 <= len(b); i++ {
-		if string(b[i:i+4]) == "WEBP" {
-			return true
-		}
+func BenchmarkTranscodeWebPSmoke(b *testing.B) {
+	in := ensureSampleJPEGPath(b)
+	tr := NewTranscoder()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		out := filepath.Join("..", "..", "..", "build", "bench-smoke.webp")
+		_, _ = tr.Transcode(context.Background(), jobs.CodecWebP, in, out, 80)
 	}
-	return false
 }

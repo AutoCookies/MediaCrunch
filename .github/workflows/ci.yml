@@ -13,6 +13,6 @@ jobs:
         with:
           go-version: '1.22'
       - name: Install native dependencies
-        run: sudo apt update && sudo apt install -y build-essential pkg-config libwebp-dev libjpeg-dev libpng-dev
+        run: sudo apt update && sudo apt install -y build-essential pkg-config sqlite3 libwebp-dev libjpeg-dev libpng-dev libheif-dev
       - name: Run CI
         run: make ci
