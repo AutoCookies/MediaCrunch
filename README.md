@@ -1,4 +1,13 @@
-# MediaCrunch v1.0.0
+<div align="center">
+  <img src="assets/logo.png" alt="MediaCrunch Logo" width="160"/>
+
+  # MediaCrunch
+
+  [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/nnkfW83n)
+  [![Go](https://img.shields.io/badge/Go-1.22-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://go.dev/)
+  [![License](https://img.shields.io/badge/License-Non--Commercial%20Copyleft-orange?style=for-the-badge)](LICENSE)
+
+</div>
 
 MediaCrunch is a local CPU-only image transcoding daemon with WebP + AVIF support, durable SQLite history, smart skip policy, hash dedupe, metrics, benchmarks, and optional pprof.
 
